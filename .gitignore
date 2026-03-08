@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+.env.*
+.DS_Store
+logs/
+*.log
+*.log.*
+/uploads/
+# Build folders
+target/
+build/
+bin/
