@@ -30,8 +30,10 @@ const ProgressPage = () => {
     const [uploadData, setUploadData] = useState({ severity: 'mild', notes: '', image: null });
     const [previewUrl, setPreviewUrl] = useState(null);
 
-    // Mock User ID for demo
-    const userId = '12345678-1234-1234-1234-123456789012';
+    const userObj = JSON.parse(localStorage.getItem('medivision_user'));
+    const userId = userObj ? userObj.id : 'anonymous';
+
+    const token = localStorage.getItem('medivision_token');
 
     useEffect(() => {
         fetchProgress();
@@ -40,7 +42,10 @@ const ProgressPage = () => {
     const fetchProgress = async () => {
         try {
             const resp = await axios.get('http://localhost:5000/api/progress', {
-                headers: { 'x-user-id': userId }
+                headers: { 
+                    'x-user-id': userId,
+                    'Authorization': `Bearer ${token}`
+                }
             });
             setTrackingData(resp.data);
         } catch (err) {
@@ -70,7 +75,11 @@ const ProgressPage = () => {
         formData.append('image', uploadData.image);
 
         try {
-            await axios.post('http://localhost:5000/api/progress', formData);
+            await axios.post('http://localhost:5000/api/progress', formData, {
+                 headers: {
+                    'Authorization': `Bearer ${token}`
+                 }
+            });
             setUploadData({ severity: 'mild', notes: '', image: null });
             setPreviewUrl(null);
             fetchProgress();

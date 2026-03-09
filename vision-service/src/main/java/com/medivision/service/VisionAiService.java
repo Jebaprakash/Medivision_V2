@@ -29,8 +29,11 @@ public class VisionAiService {
     @Value("${ai.openai.api-key:}")
     private String openaiApiKey;
 
-    @Value("${ai.gemini.api-key:}")
-    private String geminiApiKey;
+    @Value("${ai.gemini.vision.api-key:}")
+    private String geminiVisionApiKey;
+
+    @Value("${ai.gemini.chat.api-key:}")
+    private String geminiChatApiKey;
 
     private final ObjectMapper mapper = new ObjectMapper();
 
@@ -59,7 +62,7 @@ public class VisionAiService {
      */
     public DiagnosisResponse analyse(byte[] imageBytes, String mimeType, List<String> symptoms) {
         // --- Mock Mode Fallback ---
-        if ("dummy-gemini-key".equals(geminiApiKey) || "sk-dummy-key".equals(openaiApiKey)) {
+        if ("dummy-gemini-key".equals(geminiVisionApiKey) || "sk-dummy-key".equals(openaiApiKey)) {
             log.info("Using mock AI response since dummy API key is configured.");
             return DiagnosisResponse.builder()
                     .disease("Mock Eczema (Test Mode)")
@@ -99,7 +102,7 @@ public class VisionAiService {
     // ---------------------------------------------------------------
 
     private String buildMedicalPrompt(String symptoms) {
-        return "You are a dermatology AI assistant. Analyze the uploaded skin image and determine if it contains a skin condition such as acne, eczema, psoriasis, fungal infection, rash, or melanoma.\n\n"
+        return "You are a dermatology AI assistant. Analyze the uploaded skin image directly, factoring in the patient's symptoms, and determine if it contains a skin condition such as acne, eczema, psoriasis, fungal infection, rash, or melanoma.\n\n"
                 +
                 "Respond ONLY with valid JSON.\n\n"
                 +
@@ -195,8 +198,8 @@ public class VisionAiService {
 
         String response = geminiClient.post()
                 .uri(uriBuilder -> uriBuilder
-                        .path("/models/gemini-flash-latest:generateContent")
-                        .queryParam("key", geminiApiKey)
+                        .path("/models/gemini-2.5-flash-lite:generateContent")
+                        .queryParam("key", geminiVisionApiKey)
                         .build())
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(body)
@@ -283,7 +286,7 @@ public class VisionAiService {
      */
     public String getChatResponse(String userMessage) {
         // --- Mock Mode Fallback ---
-        if ("dummy-gemini-key".equals(geminiApiKey) || "sk-dummy-key".equals(openaiApiKey)) {
+        if ("dummy-gemini-key".equals(geminiChatApiKey) || "sk-dummy-key".equals(openaiApiKey)) {
             return "This is a mock response from MediVision AI (Test Mode). Since you are using a dummy API key, I can't reach the real AI, but typically I would provide an explanation of '"
                     + userMessage + "', precautions, and doctor-visit advice.";
         }
@@ -301,6 +304,8 @@ public class VisionAiService {
             return "I apologize, but I am unable to process your request at the moment.";
         }
     }
+
+    // (Removed HuggingFace text API block since it is throwing 404 blockages on router)
 
     private String callOpenAiText(String systemPrompt, String userMessage) {
         Map<String, Object> systemMsg = Map.of("role", "system", "content", systemPrompt);
@@ -332,8 +337,8 @@ public class VisionAiService {
 
         String response = geminiClient.post()
                 .uri(uriBuilder -> uriBuilder
-                        .path("/models/gemini-flash-latest:generateContent")
-                        .queryParam("key", geminiApiKey)
+                        .path("/models/gemini-2.5-flash-lite:generateContent")
+                        .queryParam("key", geminiChatApiKey)
                         .build())
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(body)

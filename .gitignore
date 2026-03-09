@@ -11,3 +11,5 @@ logs/
 target/
 build/
 bin/
+server/uploads/
+test-hf*.js

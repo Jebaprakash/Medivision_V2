@@ -4,6 +4,7 @@ const pool = require('../db');
 const multer = require('multer');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const authMiddleware = require('../middleware/auth');
 
 const storage = multer.diskStorage({
     destination: 'uploads/progress/',
@@ -21,9 +22,9 @@ if (!fs.existsSync('uploads/progress/')) {
 }
 
 // Get tracking history for user
-router.get('/', async (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
     try {
-        const userId = req.headers['x-user-id']; // Simplified for demo, should use JWT in real app
+        const userId = req.user.id;
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
         const result = await pool.query(
@@ -38,9 +39,10 @@ router.get('/', async (req, res) => {
 });
 
 // Add new tracking log
-router.post('/', upload.single('image'), async (req, res) => {
+router.post('/', authMiddleware, upload.single('image'), async (req, res) => {
     try {
-        const { userId, severity, notes } = req.body;
+        const userId = req.user.id;
+        const { severity, notes } = req.body;
         const imageUrl = req.file ? `/uploads/progress/${req.file.filename}` : null;
 
         if (!userId || !severity) {

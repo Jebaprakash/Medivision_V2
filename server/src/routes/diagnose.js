@@ -146,9 +146,9 @@ router.post('/', authMiddleware, upload.single('image'), async (req, res) => {
 
         try {
             await pool.query(
-                `INSERT INTO diagnosis_history (user_id, disease_id, confidence_score, image_url, symptoms, prediction, severity_text, status)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, 'initial')`,
-                [req.user.id, diseaseId, confidence, imageUrl, symptomArray, condition, emergencyResult.severity]
+                `INSERT INTO diagnosis_history (user_id, disease_id, confidence_score, image_url, symptoms)
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [req.user.id, diseaseId, confidence, imageUrl, symptomArray]
             );
         } catch (dbErr) {
             console.error(`[${new Date().toISOString()}] Failed to insert diagnosis history:`, dbErr.message);
