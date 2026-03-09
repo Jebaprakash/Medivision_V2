@@ -1,6 +1,16 @@
+/**
+ * ProgressPage — Disease Progress Tracking
+ *
+ * Fetches real diagnosis history from /api/history (authenticated endpoint).
+ * Shows:
+ *  - Severity over time trend chart (Chart.js)
+ *  - Trend label: Improving / Same / Worsening
+ *  - Comparison journal with images
+ *  - Upload a new manual progress log
+ */
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Camera, Plus, ChevronRight, TrendingUp, History, Image as ImageIcon } from 'lucide-react';
+import { Camera, Plus, TrendingUp, History, Image as ImageIcon, ArrowUp, ArrowDown, Minus } from 'lucide-react';
 import { Line } from 'react-chartjs-2';
 import {
     Chart as ChartJS,
@@ -11,45 +21,53 @@ import {
     Title,
     Tooltip,
     Legend,
+    Filler,
 } from 'chart.js';
+import { fetchMyHistory } from '../services/api';
 
-ChartJS.register(
-    CategoryScale,
-    LinearScale,
-    PointElement,
-    LineElement,
-    Title,
-    Tooltip,
-    Legend
-);
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
+
+const SEV_ORDER = { mild: 1, moderate: 2, severe: 3 };
+
+function computeTrend(records) {
+    if (records.length < 2) return 'Same';
+    const first = SEV_ORDER[records[0].severity]  || 1;
+    const last  = SEV_ORDER[records[records.length - 1].severity] || 1;
+    if (last < first) return 'Improving';
+    if (last > first) return 'Worsening';
+    return 'Same';
+}
+
+const TrendIcon = ({ trend }) => {
+    if (trend === 'Improving') return <ArrowDown color="#10B981" size={20} />;
+    if (trend === 'Worsening') return <ArrowUp color="#EF4444" size={20} />;
+    return <Minus color="#F59E0B" size={20} />;
+};
 
 const ProgressPage = () => {
-    const [trackingData, setTrackingData] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const [historyData, setHistoryData] = useState([]);
+    const [isLoading,   setIsLoading]   = useState(true);
     const [isUploading, setIsUploading] = useState(false);
-    const [uploadData, setUploadData] = useState({ severity: 'mild', notes: '', image: null });
-    const [previewUrl, setPreviewUrl] = useState(null);
-
-    const userObj = JSON.parse(localStorage.getItem('medivision_user'));
-    const userId = userObj ? userObj.id : 'anonymous';
+    const [uploadData,  setUploadData]  = useState({ severity: 'mild', notes: '', image: null });
+    const [previewUrl,  setPreviewUrl]  = useState(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [error,       setError]       = useState('');
 
     const token = localStorage.getItem('medivision_token');
 
-    useEffect(() => {
-        fetchProgress();
-    }, []);
+    useEffect(() => { fetchHistory(); }, []);
 
-    const fetchProgress = async () => {
+    const fetchHistory = async () => {
+        setIsLoading(true);
+        setError('');
         try {
-            const resp = await axios.get('http://localhost:5000/api/progress', {
-                headers: { 
-                    'x-user-id': userId,
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-            setTrackingData(resp.data);
+            const res = await fetchMyHistory(1, 30);
+            const rows = res.data.history || [];
+            // Sort ascending for chart
+            setHistoryData([...rows].reverse());
         } catch (err) {
-            console.error('Fetch progress error:', err);
+            console.error('Fetch history error:', err);
+            setError('Failed to load your diagnosis history.');
         } finally {
             setIsLoading(false);
         }
@@ -69,230 +87,292 @@ const ProgressPage = () => {
 
         setIsUploading(true);
         const formData = new FormData();
-        formData.append('userId', userId);
         formData.append('severity', uploadData.severity);
         formData.append('notes', uploadData.notes);
         formData.append('image', uploadData.image);
 
         try {
             await axios.post('http://localhost:5000/api/progress', formData, {
-                 headers: {
-                    'Authorization': `Bearer ${token}`
-                 }
+                headers: { 'Authorization': `Bearer ${token}` },
             });
             setUploadData({ severity: 'mild', notes: '', image: null });
             setPreviewUrl(null);
-            fetchProgress();
+            setIsModalOpen(false);
+            fetchHistory();
         } catch (err) {
             console.error('Upload error:', err);
+            alert('Failed to save progress log. Please try again.');
         } finally {
             setIsUploading(false);
         }
     };
 
+    // Severity → numeric for chart
+    const trend = computeTrend(historyData);
+
     const chartData = {
-        labels: trackingData.map(d => new Date(d.created_at).toLocaleDateString()),
-        datasets: [
-            {
-                label: 'Condition Severity',
-                data: trackingData.map(d => {
-                    if (d.severity === 'severe') return 3;
-                    if (d.severity === 'moderate') return 2;
-                    return 1;
-                }),
-                borderColor: 'rgb(59, 130, 246)',
-                backgroundColor: 'rgba(59, 130, 246, 0.5)',
-                tension: 0.3,
-            }
-        ]
+        labels: historyData.map(d => new Date(d.created_at).toLocaleDateString('en-IN', {
+            day: '2-digit', month: 'short'
+        })),
+        datasets: [{
+            label: 'Severity Level',
+            data: historyData.map(d => SEV_ORDER[d.severity] || 1),
+            borderColor: 'rgb(8, 145, 178)',
+            backgroundColor: 'rgba(8, 145, 178, 0.1)',
+            borderWidth: 2.5,
+            tension: 0.35,
+            fill: true,
+            pointBackgroundColor: historyData.map(d => {
+                if (d.severity === 'severe')   return '#EF4444';
+                if (d.severity === 'moderate') return '#F59E0B';
+                return '#10B981';
+            }),
+            pointRadius: 6,
+        }],
     };
 
     const chartOptions = {
         responsive: true,
+        maintainAspectRatio: false,
         plugins: {
             legend: { display: false },
+            tooltip: {
+                callbacks: {
+                    label: ctx => {
+                        const labels = ['', 'Mild', 'Moderate', 'Severe'];
+                        return ` Severity: ${labels[ctx.parsed.y] || ctx.parsed.y}`;
+                    },
+                },
+            },
         },
         scales: {
             y: {
-                min: 0,
-                max: 4,
+                min: 0, max: 4,
                 ticks: {
-                    callback: (value) => {
-                        if (value === 1) return 'Mild';
-                        if (value === 2) return 'Moderate';
-                        if (value === 3) return 'Severe';
-                        return '';
-                    }
-                }
-            }
-        }
+                    stepSize: 1,
+                    callback: v => ['', 'Mild', 'Moderate', 'Severe', ''][v] || '',
+                },
+                grid: { color: 'rgba(0,0,0,0.05)' },
+            },
+            x: { grid: { display: false } },
+        },
     };
 
+    const trendColor = trend === 'Improving' ? '#10B981' : trend === 'Worsening' ? '#EF4444' : '#F59E0B';
+    const trendBg    = trend === 'Improving' ? 'rgba(16,185,129,0.1)' : trend === 'Worsening' ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)';
+
     return (
-        <div className="max-w-6xl mx-auto p-4 md:p-8">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+        <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '1.5rem' }}>
+
+            {/* Header */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem', gap: '1rem' }}>
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-                        <TrendingUp className="text-blue-600" />
+                    <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '2rem', margin: 0, fontWeight: 800, color: 'var(--text-primary)' }}>
+                        <TrendingUp color="var(--primary)" size={32} />
                         Disease Progress Tracking
                     </h1>
-                    <p className="text-gray-500 mt-2">Monitor your skin condition improvement over time.</p>
+                    <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                        Monitor your skin condition improvement over time based on your diagnosis history.
+                    </p>
                 </div>
-
                 <button
-                    onClick={() => document.getElementById('upload-modal').showModal()}
-                    className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
+                    onClick={() => setIsModalOpen(true)}
+                    className="btn btn-primary"
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
                 >
-                    <Plus className="w-5 h-5" />
-                    New Log
+                    <Plus size={20} /> Log Progress
                 </button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Improvement Graph */}
-                <div className="lg:col-span-2 bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-                    <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-                        <TrendingUp className="text-blue-500 w-5 h-5" />
-                        Improvement Over Time
-                    </h2>
-                    {trackingData.length > 1 ? (
-                        <div className="h-[400px]">
-                            <Line data={chartData} options={chartOptions} />
-                        </div>
-                    ) : (
-                        <div className="h-[300px] flex flex-col items-center justify-center text-gray-400 bg-gray-50 rounded-xl border-2 border-dashed border-gray-100">
-                            <TrendingUp className="w-12 h-12 mb-4 opacity-20" />
-                            <p>Upload at least two logs to see your progress graph.</p>
+            {error && (
+                <div className="alert alert-danger" style={{ marginBottom: '1.5rem' }}>
+                    <span className="alert-icon">⚠️</span>
+                    <span>{error}</span>
+                </div>
+            )}
+
+            {isLoading ? (
+                <div className="spinner-overlay">
+                    <div className="spinner"></div>
+                    <p className="spinner-text">Loading your progress...</p>
+                </div>
+            ) : (
+                <>
+                    {/* Trend Summary Cards */}
+                    {historyData.length > 0 && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                            <div className="card" style={{ padding: '1.25rem', textAlign: 'center' }}>
+                                <p style={{ margin: '0 0 0.25rem 0', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Diagnoses</p>
+                                <p style={{ margin: 0, fontSize: '2rem', fontWeight: 800, color: 'var(--primary)' }}>{historyData.length}</p>
+                            </div>
+                            <div className="card" style={{ padding: '1.25rem', textAlign: 'center' }}>
+                                <p style={{ margin: '0 0 0.25rem 0', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Latest Condition</p>
+                                <p style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                    {historyData[historyData.length - 1]?.disease_name || 'N/A'}
+                                </p>
+                            </div>
+                            <div className="card" style={{ padding: '1.25rem', textAlign: 'center', background: trendBg, borderColor: trendColor }}>
+                                <p style={{ margin: '0 0 0.25rem 0', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Overall Trend</p>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+                                    <TrendIcon trend={trend} />
+                                    <p style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: trendColor }}>{trend}</p>
+                                </div>
+                            </div>
+                            <div className="card" style={{ padding: '1.25rem', textAlign: 'center' }}>
+                                <p style={{ margin: '0 0 0.25rem 0', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Avg Confidence</p>
+                                <p style={{ margin: 0, fontSize: '2rem', fontWeight: 800, color: 'var(--success)' }}>
+                                    {historyData.length > 0
+                                        ? `${Math.round(historyData.reduce((s, d) => s + (d.confidence_score || 0), 0) / historyData.length * 100)}%`
+                                        : '—'}
+                                </p>
+                            </div>
                         </div>
                     )}
-                </div>
 
-                {/* Recent History */}
-                <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-                    <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-                        <History className="text-gray-500 w-5 h-5" />
-                        Comparison Journal
-                    </h2>
-                    <div className="space-y-4">
-                        {trackingData.slice().reverse().map((log, idx) => (
-                            <div key={log.id} className="flex gap-4 p-4 rounded-xl bg-gray-50 border border-gray-100 hover:bg-blue-50/50 transition-colors group">
-                                <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 border border-gray-200">
-                                    {log.image_url ? (
-                                        <img
-                                            src={`http://localhost:5000${log.image_url}`}
-                                            alt="Log"
-                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                                        />
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center bg-gray-200">
-                                            <ImageIcon className="text-gray-400 w-6 h-6" />
-                                        </div>
-                                    )}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: '2rem', alignItems: 'start' }}>
+
+                        {/* Chart Panel */}
+                        <div className="card" style={{ padding: '2rem' }}>
+                            <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', fontSize: '1.25rem', fontWeight: 700 }}>
+                                <TrendingUp color="var(--primary)" size={24} />
+                                Severity Over Time
+                            </h2>
+                            {historyData.length >= 2 ? (
+                                <div style={{ height: '360px' }}>
+                                    <Line data={chartData} options={chartOptions} />
                                 </div>
-                                <div className="flex-1">
-                                    <div className="flex justify-between items-start">
-                                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                                            {idx === 0 ? 'Latest' : `Day ${trackingData.length - idx}`}
-                                        </p>
-                                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${log.severity === 'severe' ? 'bg-red-100 text-red-600' :
-                                                log.severity === 'moderate' ? 'bg-orange-100 text-orange-600' :
-                                                    'bg-green-100 text-green-600'
-                                            }`}>
-                                            {log.severity}
-                                        </span>
-                                    </div>
-                                    <p className="font-bold text-gray-800 mt-1">{new Date(log.created_at).toLocaleDateString()}</p>
-                                    <p className="text-sm text-gray-500 line-clamp-2 mt-1 italic">"{log.notes || 'No notes added'}"</p>
+                            ) : (
+                                <div style={{ height: '300px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', background: 'var(--bg-primary)', borderRadius: 'var(--radius-md)', border: '2px dashed var(--border)' }}>
+                                    <TrendingUp size={48} style={{ opacity: 0.2, marginBottom: '1rem' }} />
+                                    <p style={{ fontWeight: 500 }}>
+                                        {historyData.length === 0 ? 'No diagnosis history yet. Run your first analysis!' : 'Upload at least 2 diagnoses to see your progress graph.'}
+                                    </p>
                                 </div>
-                            </div>
-                        ))}
-                        {trackingData.length === 0 && (
-                            <div className="text-center py-12 text-gray-400">
-                                <History className="w-12 h-12 mx-auto mb-4 opacity-10" />
-                                <p>No logs found. Start tracking today!</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
-
-            {/* Upload Modal */}
-            <dialog id="upload-modal" className="modal bg-gray-900/50 backdrop-blur-sm">
-                <div className="modal-box bg-white rounded-2xl max-w-lg p-0 overflow-hidden">
-                    <div className="p-6 border-b border-gray-100">
-                        <h3 className="font-bold text-xl">Log Daily Progress</h3>
-                        <p className="text-sm text-gray-500">Capture or upload an image to track changes.</p>
-                    </div>
-
-                    <form onSubmit={handleUpload} className="p-6 space-y-6">
-                        <div className="space-y-2">
-                            <label className="text-sm font-semibold text-gray-700">Current Appearance</label>
-                            <div
-                                onClick={() => document.getElementById('log-image').click()}
-                                className={`relative h-48 border-2 border-dashed rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all ${previewUrl ? 'border-blue-500 bg-blue-50/20' : 'border-gray-200 hover:border-blue-400 hover:bg-gray-50'
-                                    }`}
-                            >
-                                {previewUrl ? (
-                                    <img src={previewUrl} className="h-full w-full object-contain rounded-lg p-2" alt="Preview" />
-                                ) : (
-                                    <>
-                                        <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-3">
-                                            <Camera className="w-6 h-6" />
-                                        </div>
-                                        <span className="text-sm text-gray-500 font-medium">Click to upload photo</span>
-                                    </>
-                                )}
-                                <input id="log-image" type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
-                            </div>
+                            )}
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <label className="text-sm font-semibold text-gray-700">Severity Level</label>
-                                <select
-                                    className="w-full p-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500 appearance-none"
-                                    value={uploadData.severity}
-                                    onChange={e => setUploadData({ ...uploadData, severity: e.target.value })}
+                        {/* Journal Panel */}
+                        <div className="card" style={{ padding: '2rem' }}>
+                            <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', fontSize: '1.25rem', fontWeight: 700 }}>
+                                <History color="var(--text-secondary)" size={24} />
+                                Diagnosis Journal
+                            </h2>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '480px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                                {[...historyData].reverse().map((record, idx) => (
+                                    <div key={record.id} style={{ display: 'flex', gap: '0.75rem', padding: '0.875rem', background: 'var(--bg-primary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+                                        <div style={{ width: '64px', height: '64px', flexShrink: 0, borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)' }}>
+                                            {record.image_url ? (
+                                                <img
+                                                    src={`http://localhost:5000${record.image_url}`}
+                                                    alt="Diagnosis"
+                                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                />
+                                            ) : (
+                                                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--border)' }}>
+                                                    <ImageIcon color="var(--text-muted)" size={20} />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                                                <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                    {record.disease_name || 'Unidentified'}
+                                                </span>
+                                                <span className={`badge ${record.severity === 'severe' ? 'badge-severe' : record.severity === 'moderate' ? 'badge-moderate' : 'badge-mild'}`} style={{ flexShrink: 0 }}>
+                                                    {record.severity || 'N/A'}
+                                                </span>
+                                            </div>
+                                            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
+                                                {new Date(record.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                            </p>
+                                            <p style={{ fontSize: '0.75rem', color: 'var(--primary)', margin: '0.1rem 0 0 0', fontWeight: 600 }}>
+                                                {Math.round((record.confidence_score || 0) * 100)}% confidence
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                                {historyData.length === 0 && (
+                                    <div style={{ textAlign: 'center', padding: '2rem 0', color: 'var(--text-muted)' }}>
+                                        <History size={40} style={{ opacity: 0.2, marginBottom: '0.75rem', display: 'block', margin: '0 auto 0.75rem' }} />
+                                        <p>No diagnoses yet. Run your first analysis!</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* Progress Log Modal */}
+            {isModalOpen && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(8px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+                    <div className="card" style={{ width: '100%', maxWidth: '480px', padding: 0, overflow: 'hidden', borderRadius: 'var(--radius-xl)' }}>
+                        <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid var(--border)', background: 'var(--bg-primary)' }}>
+                            <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>Log Progress Entry</h3>
+                            <p style={{ margin: '0.25rem 0 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                Upload a photo to manually track your skin condition today.
+                            </p>
+                        </div>
+
+                        <form onSubmit={handleUpload} style={{ padding: '1.5rem 2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div className="form-group">
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, fontSize: '0.9rem' }}>
+                                    Photo <span style={{ color: 'var(--danger)' }}>*</span>
+                                </label>
+                                <div
+                                    onClick={() => document.getElementById('log-image-file').click()}
+                                    style={{
+                                        height: '160px',
+                                        border: `2px dashed ${previewUrl ? 'var(--primary)' : 'var(--border)'}`,
+                                        borderRadius: 'var(--radius-md)',
+                                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                                        cursor: 'pointer', transition: 'var(--transition)',
+                                    }}
                                 >
-                                    <option value="mild">Mild</option>
-                                    <option value="moderate">Moderate</option>
-                                    <option value="severe">Severe</option>
+                                    {previewUrl ? (
+                                        <img src={previewUrl} alt="Preview" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', borderRadius: '8px', padding: '0.5rem' }} />
+                                    ) : (
+                                        <>
+                                            <Camera color="var(--primary)" size={32} style={{ marginBottom: '0.5rem' }} />
+                                            <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Click to upload photo</span>
+                                        </>
+                                    )}
+                                    <input id="log-image-file" type="file" accept="image/*" onChange={handleImageChange} style={{ display: 'none' }} required />
+                                </div>
+                            </div>
+
+                            <div className="form-group">
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, fontSize: '0.9rem' }}>Severity</label>
+                                <select className="form-control" value={uploadData.severity} onChange={e => setUploadData({ ...uploadData, severity: e.target.value })}>
+                                    <option value="mild">🟢 Mild</option>
+                                    <option value="moderate">🟡 Moderate</option>
+                                    <option value="severe">🔴 Severe</option>
                                 </select>
                             </div>
-                        </div>
 
-                        <div className="space-y-2">
-                            <label className="text-sm font-semibold text-gray-700">Notes (Optional)</label>
-                            <textarea
-                                className="w-full p-4 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500 min-h-[100px]"
-                                placeholder="How does it feel today? (Itchy, dry, etc.)"
-                                value={uploadData.notes}
-                                onChange={e => setUploadData({ ...uploadData, notes: e.target.value })}
-                            ></textarea>
-                        </div>
+                            <div className="form-group">
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, fontSize: '0.9rem' }}>Notes</label>
+                                <textarea
+                                    className="form-control"
+                                    style={{ minHeight: '80px', resize: 'vertical' }}
+                                    placeholder="How does it feel today? Any changes?"
+                                    value={uploadData.notes}
+                                    onChange={e => setUploadData({ ...uploadData, notes: e.target.value })}
+                                />
+                            </div>
 
-                        <div className="flex gap-3 pt-2">
-                            <button
-                                type="button"
-                                onClick={() => document.getElementById('upload-modal').close()}
-                                className="flex-1 px-6 py-3 rounded-xl border border-gray-200 font-semibold hover:bg-gray-50 transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                disabled={isUploading || !uploadData.image}
-                                className={`flex-1 px-6 py-3 rounded-xl font-semibold text-white shadow-lg transition-all ${isUploading || !uploadData.image
-                                        ? 'bg-gray-400 cursor-not-allowed'
-                                        : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'
-                                    }`}
-                            >
-                                {isUploading ? 'Uploading...' : 'Save Log'}
-                            </button>
-                        </div>
-                    </form>
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <button type="button" onClick={() => setIsModalOpen(false)} className="btn" style={{ flex: 1, background: 'transparent', border: '1px solid var(--border)' }}>
+                                    Cancel
+                                </button>
+                                <button type="submit" disabled={isUploading || !uploadData.image} className="btn btn-primary" style={{ flex: 1, opacity: (isUploading || !uploadData.image) ? 0.5 : 1 }}>
+                                    {isUploading ? 'Saving...' : 'Save Log'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
-            </dialog>
+            )}
         </div>
     );
 };

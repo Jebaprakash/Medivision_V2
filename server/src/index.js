@@ -44,6 +44,7 @@ app.use('/api/diagnose', diagnoseRoutes);
 app.use('/api/hospitals', hospitalRoutes);
 app.use('/api/history', historyRoutes);
 app.use('/api/chatbot', chatbotRoutes);
+app.use('/api/chat', chatbotRoutes);   // shortcut alias
 app.use('/api/progress', progressRoutes);
 app.use('/api/reminders', reminderRoutes);
 app.use('/api/doctors', doctorRoutes);

@@ -4,7 +4,7 @@
  * Displays a paginated table of past diagnoses for the logged-in user.
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import { fetchHistory } from '../services/api';
+import { fetchMyHistory } from '../services/api';
 
 export default function HistoryPage({ userId }) {
     const [history, setHistory] = useState([]);
@@ -19,7 +19,7 @@ export default function HistoryPage({ userId }) {
             setLoading(true);
             setError('');
             try {
-                const res = await fetchHistory(userId, page, ITEMS_PER_PAGE);
+                const res = await fetchMyHistory(page, ITEMS_PER_PAGE);
                 setHistory(res.data.history || []);
                 setPagination(res.data.pagination || { page: 1, totalPages: 1, totalItems: 0 });
             } catch (err) {
@@ -29,7 +29,7 @@ export default function HistoryPage({ userId }) {
                 setLoading(false);
             }
         },
-        [userId]
+        []
     );
 
     useEffect(() => {

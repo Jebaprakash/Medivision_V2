@@ -63,6 +63,13 @@ export const fetchHospitals = (lat, lng, radius = 5) =>
 export const fetchHistory = (userId, page = 1, limit = 10) =>
     api.get(`/history/${userId}`, { params: { page, limit } });
 
+// Self-auth route (no userId required in URL)
+export const fetchMyHistory = (page = 1, limit = 10) =>
+    api.get('/history', { params: { page, limit } });
+
+export const fetchHistoryTrends = () =>
+    api.get('/history/trends');
+
 // ================================================================
 // Chatbot
 // ================================================================
