@@ -49,13 +49,20 @@ const HospitalsPage = () => {
 
         navigator.geolocation.getCurrentPosition(
             (position) => {
-                const lat = position.coords.latitude;
-                const lng = position.coords.longitude;
-                setUserLocation({ lat, lng });
+                const latitude = position.coords.latitude;
+                const longitude = position.coords.longitude;
+                
+                // Explicitly log exactly as requested
+                console.log("User location:", latitude, longitude);
+
+                setUserLocation({ lat: latitude, lng: longitude });
                 setLocationStatus('Location found! Fetching nearby hospitals...');
-                loadHospitals(lat, lng, radius);
+                loadHospitals(latitude, longitude, radius);
             },
             (err) => {
+                console.error("Location error:", err);
+                alert("Please allow location access to see real-time hospitals near you.");
+                
                 let errorMsg = 'Failed to fetch location.';
                 switch (err.code) {
                     case err.PERMISSION_DENIED:
