@@ -65,8 +65,19 @@ router.post('/', authMiddleware, upload.single('image'), async (req, res) => {
 
         // 3. Forward to AI microservice with retry
         const formData = new FormData();
-        formData.append('image', fs.createReadStream(req.file.path), {
-            filename: req.file.filename,
+        
+        let fileStream;
+        if (req.file.path.startsWith('http')) {
+            // It's a Cloudinary URL
+            const response = await axios.get(req.file.path, { responseType: 'stream' });
+            fileStream = response.data;
+        } else {
+            // It's a local file
+            fileStream = fs.createReadStream(req.file.path);
+        }
+
+        formData.append('image', fileStream, {
+            filename: req.file.originalname || 'upload.jpg',
             contentType: req.file.mimetype,
         });
         formData.append('symptoms', symptoms);
@@ -144,7 +155,10 @@ router.post('/', authMiddleware, upload.single('image'), async (req, res) => {
         }
 
         // 7. Save diagnosis to history (with full fields)
-        const imageUrl = `/uploads/${req.file.filename}`;
+        const imageUrl = req.file.path.startsWith('http') 
+                           ? req.file.path 
+                           : `/uploads/${req.file.filename}`;
+        
         const symptomArray = symptoms
             ? symptoms.split(',').map(s => s.trim()).filter(Boolean)
             : [];

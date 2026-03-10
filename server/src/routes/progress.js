@@ -1,25 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
-const multer = require('multer');
 const path = require('path');
-const { v4: uuidv4 } = require('uuid');
+const upload = require('../middleware/upload');
 const authMiddleware = require('../middleware/auth');
-
-const storage = multer.diskStorage({
-    destination: 'uploads/progress/',
-    filename: (req, file, cb) => {
-        cb(null, `${Date.now()}-${uuidv4()}${path.extname(file.originalname)}`);
-    }
-});
-
-const upload = multer({ storage });
-
-// Ensure directory exists
-const fs = require('fs');
-if (!fs.existsSync('uploads/progress/')) {
-    fs.mkdirSync('uploads/progress/', { recursive: true });
-}
 
 // Get tracking history for user
 router.get('/', authMiddleware, async (req, res) => {
@@ -43,7 +27,13 @@ router.post('/', authMiddleware, upload.single('image'), async (req, res) => {
     try {
         const userId = req.user.id;
         const { severity, notes } = req.body;
-        const imageUrl = req.file ? `/uploads/progress/${req.file.filename}` : null;
+        
+        let imageUrl = null;
+        if (req.file) {
+            imageUrl = req.file.path.startsWith('http') 
+                ? req.file.path 
+                : `/uploads/${req.file.filename}`;
+        }
 
         if (!userId || !severity) {
             return res.status(400).json({ error: 'User ID and severity are required' });

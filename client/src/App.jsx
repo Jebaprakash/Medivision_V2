@@ -6,7 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 import UploadPage from './pages/UploadPage';
 import ResultsPage from './pages/ResultsPage';
-import HospitalMap from './pages/HospitalMap';
+import HospitalsPage from './pages/HospitalsPage';
 import HistoryPage from './pages/HistoryPage';
 import AuthForms from './pages/AuthForms';
 import ChatbotPage from './pages/ChatbotPage';
@@ -55,7 +55,7 @@ function App() {
                             user ? <ResultsPage result={diagnosisResult} /> : <Navigate to="/auth" replace />
                         } />
                         <Route path="/hospitals" element={
-                            user ? <HospitalMap /> : <Navigate to="/auth" replace />
+                            user ? <HospitalsPage /> : <Navigate to="/auth" replace />
                         } />
                         <Route path="/history" element={
                             user ? <HistoryPage userId={user.id} /> : <Navigate to="/auth" replace />

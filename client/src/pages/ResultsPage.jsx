@@ -59,7 +59,7 @@ export default function ResultsPage({ result }) {
                     alertMessage={emergency.alertMessage}
                     recommendedAction={emergency.recommendedAction}
                     onDismiss={() => setShowEmergency(false)}
-                    onFindHospitals={() => { setShowEmergency(false); navigate('/hospitals'); }}
+                    onFindHospitals={() => { setShowEmergency(false); navigate('/hospitals', { state: { emergency: true } }); }}
                 />
             )}
 
@@ -181,7 +181,7 @@ export default function ResultsPage({ result }) {
 
             {/* Action Buttons */}
             <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', flexWrap: 'wrap' }}>
-                <Link to="/hospitals" className="btn btn-primary">🏥 Find Nearby Hospitals</Link>
+                <Link to="/hospitals" state={{ emergency: emergency?.isEmergency || false }} className="btn btn-primary">🏥 Find Nearby Hospitals</Link>
                 <Link to="/doctors" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #8b5cf6, #6366f1)' }}>
                     👨‍⚕️ Book Doctor Consultation
                 </Link>
