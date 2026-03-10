@@ -12,13 +12,16 @@ const HospitalList = ({ hospitals, isEmergency }) => {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {hospitals.map(hospital => (
+            {hospitals.map((hospital, index) => {
+                const isNearestAndEmergency = isEmergency && index === 0;
+                
+                return (
                 <div key={hospital.id || hospital.name} className="card" style={{ 
                     padding: '1.5rem', 
                     display: 'flex', 
                     flexDirection: 'column',
-                    border: isEmergency && hospital.emergency ? '2px solid var(--danger)' : '1px solid var(--border)',
-                    boxShadow: isEmergency && hospital.emergency ? '0 4px 12px rgba(220, 38, 38, 0.15)' : 'none'
+                    border: isNearestAndEmergency ? '2px solid var(--danger)' : '1px solid var(--border)',
+                    boxShadow: isNearestAndEmergency ? '0 4px 12px rgba(220, 38, 38, 0.15)' : 'none'
                 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
                         <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-primary)' }}>
@@ -64,7 +67,8 @@ const HospitalList = ({ hospitals, isEmergency }) => {
                         ) : null}
                     </div>
                 </div>
-            ))}
+                );
+            })}
         </div>
     );
 };
