@@ -61,18 +61,18 @@ const HospitalsPage = () => {
             },
             (err) => {
                 console.error("Location error:", err);
-                alert("Please allow location access to see real-time hospitals near you.");
+                // Do not alert immediately; let's try IP fallback first!
                 
-                let errorMsg = 'Failed to fetch location.';
+                let errorMsg = 'Failed to fetch browser location.';
                 switch (err.code) {
                     case err.PERMISSION_DENIED:
-                        errorMsg = 'Location permission was denied. Using default city location.';
+                        errorMsg = 'Location permission was denied by browser.';
                         break;
                     case err.POSITION_UNAVAILABLE:
-                        errorMsg = 'Location information is unavailable.';
+                        errorMsg = 'Location information is unavailable on this device.';
                         break;
                     case err.TIMEOUT:
-                        errorMsg = 'Location request timed out.';
+                        errorMsg = 'Browser location request timed out.';
                         break;
                     default:
                         break;
@@ -80,16 +80,36 @@ const HospitalsPage = () => {
                 handleLocationFallback(errorMsg);
             },
             {
-                enableHighAccuracy: true,
-                timeout: 10000,
-                maximumAge: 0
+                // Disable high accuracy because it forces desktops/Linux to hang and timeout if no physical GPS exists!
+                enableHighAccuracy: false,
+                timeout: 15000,
+                maximumAge: 60000 
             }
         );
     };
 
-    const handleLocationFallback = (errorMsg) => {
-        console.warn('Fallback triggered:', errorMsg);
-        setError(errorMsg);
+    const handleLocationFallback = async (errorMsg) => {
+        console.warn('GPS Failed, attempting IP fallback:', errorMsg);
+        setLocationStatus('GPS failed. Attempting network IP location...');
+        
+        try {
+            // Unofficial but reliable free IP Geolocation API
+            const res = await fetch('https://ipapi.co/json/');
+            const data = await res.json();
+            
+            if (data && data.latitude && data.longitude) {
+                console.log("IP User location:", data.latitude, data.longitude);
+                setUserLocation({ lat: data.latitude, lng: data.longitude });
+                setLocationStatus(`Location found via network (${data.city || 'Unknown'})! Fetching hospitals...`);
+                loadHospitals(data.latitude, data.longitude, radius);
+                return; // successfully recovered!
+            }
+        } catch (e) {
+            console.error('IP Fallback also failed:', e);
+        }
+
+        // Final safe default fallback
+        setError(errorMsg + ' (Network fallback also failed).');
         setUserLocation({ lat: DEFAULT_LOCATION[0], lng: DEFAULT_LOCATION[1] });
         setLocationStatus('Using default location (Chennai).');
         loadHospitals(DEFAULT_LOCATION[0], DEFAULT_LOCATION[1], radius);
